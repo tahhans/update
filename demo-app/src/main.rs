@@ -202,14 +202,33 @@ fn install_windows_cjk_font(ctx: &egui::Context) -> Result<(), String> {
 }
 
 /// 拉起 updater 子进程，后台线程逐行读取 stdout 状态帧。
-fn spawn_updater(shared: &Arc<Mutex<Shared>>, updater_exe: &PathBuf, config_path: &PathBuf, args: &[&str]) {
+fn spawn_updater(
+    shared: &Arc<Mutex<Shared>>,
+    updater_exe: &PathBuf,
+    config_path: &PathBuf,
+    args: &[&str],
+) -> bool {
+    let applying = args.contains(&"--apply");
     let mut cmd = std::process::Command::new(updater_exe);
     cmd.args(args.iter().copied())
         .arg(config_path)
         .arg("--parent-pid")
         .arg(std::process::id().to_string())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped());
+        .current_dir(
+            updater_exe
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new(".")),
+        )
+        .stdout(if applying {
+            std::process::Stdio::null()
+        } else {
+            std::process::Stdio::piped()
+        })
+        .stderr(if applying {
+            std::process::Stdio::null()
+        } else {
+            std::process::Stdio::piped()
+        });
 
     #[cfg(windows)]
     {
@@ -224,9 +243,14 @@ fn spawn_updater(shared: &Arc<Mutex<Shared>>, updater_exe: &PathBuf, config_path
             s.busy = false;
             s.status_text = format!("无法启动 updater：{e}");
             s.push_log(format!("spawn 失败: {e}"));
-            return;
+            return false;
         }
     };
+
+    if applying {
+        drop(child);
+        return true;
+    }
 
     // stdout 帧线程
     let shared_out = shared.clone();
@@ -260,6 +284,7 @@ fn spawn_updater(shared: &Arc<Mutex<Shared>>, updater_exe: &PathBuf, config_path
         let _ = child.wait();
         shared_wait.lock().unwrap().busy = false;
     });
+    true
 }
 
 impl DemoApp {
@@ -284,13 +309,14 @@ impl DemoApp {
         }
     }
 
-    fn run_stage(&self, args: &[&str]) {
+    fn run_stage(&self, args: &[&str]) -> bool {
         {
             let mut s = self.shared.lock().unwrap();
             s.busy = true;
         }
-        spawn_updater(&self.shared, &self.updater_exe, &self.config_path, args);
+        let started = spawn_updater(&self.shared, &self.updater_exe, &self.config_path, args);
         self.ctx.request_repaint_after(Duration::from_millis(100));
+        started
     }
 }
 
@@ -380,7 +406,11 @@ impl eframe::App for DemoApp {
         });
 
         if let Some(args) = action {
-            self.run_stage(args);
+            let applying = args.contains(&"--apply");
+            if self.run_stage(args) && applying {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                return;
+            }
         }
 
         // 子进程帧到达后持续重绘

@@ -168,7 +168,7 @@ fn apply_phase(cfg: &Config, parent_pid: Option<u32>) -> Result<i32, AppError> {
     let notes = String::new();
 
     // 等待旧程序退出，释放 exe 文件占用。
-    wait_for_parent(parent_pid);
+    wait_for_parent(parent_pid)?;
 
     let backup = cache.join("backup");
     emit(State::Applying, &pending, &notes, 0, 0, None);
@@ -277,9 +277,56 @@ fn rollback_and_cleanup(ctx: &InstallContext) {
     install::cleanup(ctx);
 }
 
-fn wait_for_parent(_pid: Option<u32>) {
-    // TODO(windows): OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION) 轮询等待旧进程退出。
-    // 非 Windows 测试环境直接跳过。
+#[cfg(windows)]
+fn wait_for_parent(pid: Option<u32>) -> Result<(), AppError> {
+    use std::ffi::c_void;
+
+    const SYNCHRONIZE: u32 = 0x0010_0000;
+    const INFINITE: u32 = u32::MAX;
+    const WAIT_OBJECT_0: u32 = 0;
+    const ERROR_INVALID_PARAMETER: u32 = 87;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn OpenProcess(access: u32, inherit_handle: i32, process_id: u32) -> *mut c_void;
+        fn WaitForSingleObject(handle: *mut c_void, milliseconds: u32) -> u32;
+        fn CloseHandle(handle: *mut c_void) -> i32;
+        fn GetLastError() -> u32;
+    }
+
+    let Some(pid) = pid else {
+        return Ok(());
+    };
+
+    let handle = unsafe { OpenProcess(SYNCHRONIZE, 0, pid) };
+    if handle.is_null() {
+        let error = unsafe { GetLastError() };
+        if error == ERROR_INVALID_PARAMETER {
+            return Ok(());
+        }
+        return Err(AppError::Install(format!(
+            "无法等待主程序退出（PID {pid}）：{}",
+            std::io::Error::from_raw_os_error(error as i32)
+        )));
+    }
+
+    let wait_result = unsafe { WaitForSingleObject(handle, INFINITE) };
+    let wait_error = (wait_result != WAIT_OBJECT_0).then(|| unsafe { GetLastError() });
+    unsafe {
+        CloseHandle(handle);
+    }
+    if let Some(error) = wait_error {
+        return Err(AppError::Install(format!(
+            "等待主程序退出失败（PID {pid}）：{}",
+            std::io::Error::from_raw_os_error(error as i32)
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn wait_for_parent(_pid: Option<u32>) -> Result<(), AppError> {
+    Ok(())
 }
 
 fn relaunch(cfg: &Config, staging: &PathBuf) -> Result<(), AppError> {

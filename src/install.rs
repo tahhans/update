@@ -68,6 +68,9 @@ pub fn install(
 ) -> Result<(InstallContext, Vec<JournalFile>), AppError> {
     std::fs::create_dir_all(target_root)?;
     std::fs::create_dir_all(backup)?;
+    let running_exe = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.canonicalize().ok());
 
     let mut files: Vec<JournalFile> = Vec::new();
 
@@ -81,6 +84,13 @@ pub fn install(
             .strip_prefix(staging)
             .map_err(|e| AppError::Install(e.to_string()))?;
         let target = target_root.join(rel);
+        if running_exe
+            .as_ref()
+            .zip(target.canonicalize().ok().as_ref())
+            .is_some_and(|(running, target)| running == target)
+        {
+            continue;
+        }
         let backup_file = backup.join(rel);
 
         if let Some(p) = target.parent() {
@@ -142,4 +152,36 @@ pub fn rollback(ctx: &InstallContext) -> Result<(), AppError> {
 pub fn cleanup(ctx: &InstallContext) {
     let _ = std::fs::remove_dir_all(&ctx.staging);
     let _ = std::fs::remove_dir_all(&ctx.backup);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::install;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn install_skips_the_updater_executable_while_it_is_running() {
+        let running_exe = std::env::current_exe().unwrap();
+        let target_root = running_exe.parent().unwrap();
+        let exe_name = running_exe.file_name().unwrap();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp = std::env::temp_dir().join(format!(
+            "generic-updater-install-{}-{timestamp}",
+            std::process::id()
+        ));
+        let staging = temp.join("staging");
+        let backup = temp.join("backup");
+        std::fs::create_dir_all(&staging).unwrap();
+        std::fs::write(staging.join(exe_name), b"replacement").unwrap();
+
+        let original = std::fs::read(&running_exe).unwrap();
+        let (_, files) = install(&staging, target_root, &backup).unwrap();
+
+        assert!(files.is_empty());
+        assert_eq!(std::fs::read(&running_exe).unwrap(), original);
+        std::fs::remove_dir_all(temp).unwrap();
+    }
 }

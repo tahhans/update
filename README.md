@@ -35,7 +35,7 @@ target\release\generic-updater.exe
 - GitHub 的 `windows-latest` 云端机器自带 VS 工具链和 Rust 环境；
 - 分别编译 `demo-app.exe`（可视化界面）和 `generic-updater.exe`（更新器），将两者与 `app.json` / `version.txt` 打入可运行 demo 压缩包；Release 只发布该 zip、对应 `.sha256` 和 `latest-version.json`。
 
-Windows 版界面会尝试使用系统内的 SimHei、DengXian 或 YaHei 字体显示中文；点击更新操作启动 updater 时会隐藏额外的控制台窗口，输出仍会显示在界面日志中。
+Windows 版界面会尝试使用系统内的 SimHei、DengXian 或 YaHei 字体显示中文；点击更新操作启动 updater 时会隐藏额外的控制台窗口。安装时 GUI 会先退出以释放主程序文件，updater 会等待 GUI 退出并跳过覆盖自身正在运行的 exe。
 
 你本地只需要写代码、push，不用装 Rust、不用装 VS。
 

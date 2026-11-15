@@ -86,7 +86,7 @@ demo-app-windows-x64-demo.zip.sha256
 latest-version.json
 ```
 
-`demo-app-windows-x64-demo.zip` 是可直接运行的演示包，包含 GUI 主程序、外置 updater、`app.json` 和 `version.txt`。Release 只上传此 zip、其 SHA256 文件和 `latest-version.json`；清单将 zip 标记为 portable 演示包。Release 正文按 `## 中文` / `## English` 分段。`latest-version.json` 由 `scripts/build-metadata.sh` 生成但不签名；因为当前 demo 配置使用 Release API 源且没有内置可信公钥，不能将它配置为强制验签的 metadata 源。此 demo 工作流不生成真实 installer、offline 包或独立更新包。
+`demo-app-windows-x64-demo.zip` 是可直接运行的演示包，包含 GUI 主程序、外置 updater、`app.json` 和 `version.txt`。安装时主程序会退出释放自身文件，updater 等待主程序退出，并跳过覆盖自身正在运行的 updater exe。Release 只上传此 zip、其 SHA256 文件和 `latest-version.json`；清单将 zip 标记为 portable 演示包。Release 正文按 `## 中文` / `## English` 分段。`latest-version.json` 由 `scripts/build-metadata.sh` 生成但不签名；因为当前 demo 配置使用 Release API 源且没有内置可信公钥，不能将它配置为强制验签的 metadata 源。此 demo 工作流不生成真实 installer、offline 包或独立更新包。
 
 ## 3. `.sha256` 文件格式
 
