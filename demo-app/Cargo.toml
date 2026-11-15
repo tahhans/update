@@ -1,0 +1,22 @@
+[package]
+name = "demo-app"
+version = "0.1.0"
+edition = "2021"
+description = "egui 极简测试主程序：通过子进程 + protocol:2 JSON 帧调用外置 generic-updater"
+publish = false
+
+[[bin]]
+name = "demo-app"
+path = "src/main.rs"
+
+[dependencies]
+eframe = "0.28"
+egui = "0.28"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+strip = true
