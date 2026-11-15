@@ -31,7 +31,7 @@ target\release\generic-updater.exe
 
 仓库已带 `.github/workflows/build.yml`：
 
-- 推一个 `v*` tag（或在 Actions 页面手动触发）；
+- 推一个 `v*` tag；或在 Actions 页面手动运行，并在 `tag_name` 中填写要构建发布的 tag（例如 `v0.1.0`）；
 - GitHub 的 `windows-latest` 云端机器自带 VS 工具链和 Rust 环境；
 - 自动 `cargo build --release`，把 `generic-updater.exe` 挂到对应 Release 资产。
 
@@ -102,17 +102,17 @@ generic-updater.exe --apply   app.json --parent-pid 12345
 
 ```json
 {
-  "repo": "your-name/your-app",
-  "asset_name": "your-app-windows-x64-online-update.zip",
+  "repo": "tahhans/update",
+  "asset_name": "generic-updater.exe",
   "version_file": "version.txt",
   "install_dir": ".",
-  "exe_name": "your-app.exe",
+  "exe_name": "generic-updater.exe",
 
   "feed_url": null,
   "check_interval_secs": 86400,
   "auto_check": true,
   "state_file": null,
-  "product": "your-app",
+  "product": "generic-updater",
   "metadata_file": null,
   "launch_probe_secs": 10
 }

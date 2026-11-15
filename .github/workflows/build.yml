@@ -5,6 +5,14 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "要构建并发布的 Git tag（例如 v0.1.0）"
+        required: true
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
   build-windows:
@@ -12,6 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag_name || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -24,5 +34,6 @@ jobs:
       - name: Upload exe to Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag_name || github.ref_name }}
           files: target/x86_64-pc-windows-msvc/release/generic-updater.exe
           fail_on_unmatched_files: true
