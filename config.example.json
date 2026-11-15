@@ -1,16 +1,16 @@
 {
   "repo": "tahhans/update",
-  "asset_name": "generic-updater.exe",
+  "asset_name": "demo-app-windows-x64-online-update.zip",
   "version_file": "version.txt",
   "install_dir": ".",
-  "exe_name": "generic-updater.exe",
+  "exe_name": "demo-app.exe",
 
   "feed_url": null,
   "check_interval_secs": 86400,
   "auto_check": true,
   "state_file": null,
 
-  "product": "generic-updater",
+  "product": "demo-app",
   "metadata_file": null,
   "launch_probe_secs": 10
 }

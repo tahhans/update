@@ -1,13 +1,13 @@
-name: build-windows-updater
+name: release-windows-demo
 
-# 云端编译：本地不需要装 Rust，打 tag 后由 GitHub Actions 在 Windows  runner 上出 exe。
+# 构建 GUI demo 和外置 updater，并按发布规范生成更新包、哈希与元数据。
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "要构建并发布的 Git tag（例如 v0.1.0）"
+        description: "要构建并发布的 Git tag（例如 v0.1.0_demo-app）"
         required: true
         type: string
 
@@ -17,6 +17,8 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,13 +30,126 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Build release
+      - name: Build updater
         run: cargo build --release --target x86_64-pc-windows-msvc
 
-      - name: Upload exe to Release
+      - name: Build demo app
+        run: cargo build --release --manifest-path demo-app/Cargo.toml --target x86_64-pc-windows-msvc
+
+      - name: Prepare release package
+        id: release
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag_name || github.ref_name }}
+        run: |
+          $version = $env:RELEASE_TAG -replace '^v', ''
+          $version = $version -replace '_.*$', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$') {
+            throw "Release tag does not contain a valid semver version: $env:RELEASE_TAG"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+          $dist = Join-Path $env:GITHUB_WORKSPACE "dist"
+          $package = Join-Path $env:RUNNER_TEMP "demo-app-package"
+          $metadataInput = Join-Path $env:RUNNER_TEMP "metadata-input"
+          New-Item -ItemType Directory -Force -Path $dist, $package, $metadataInput | Out-Null
+
+          $updater = Join-Path $env:GITHUB_WORKSPACE "target/x86_64-pc-windows-msvc/release/generic-updater.exe"
+          $demoApp = Join-Path $env:GITHUB_WORKSPACE "target/x86_64-pc-windows-msvc/release/demo-app.exe"
+          foreach ($artifact in @($updater, $demoApp)) {
+            if (-not (Test-Path $artifact -PathType Leaf)) {
+              throw "Expected build output was not generated: $artifact"
+            }
+          }
+
+          Copy-Item $updater (Join-Path $dist "generic-updater.exe")
+          Copy-Item $demoApp (Join-Path $dist "demo-app.exe")
+          Copy-Item $demoApp $package
+          Copy-Item $updater $package
+
+          $config = @"
+          {
+            "repo": "tahhans/update",
+            "asset_name": "demo-app-windows-x64-online-update.zip",
+            "version_file": "version.txt",
+            "install_dir": ".",
+            "exe_name": "demo-app.exe",
+            "feed_url": null,
+            "check_interval_secs": 86400,
+            "auto_check": true,
+            "state_file": null,
+            "product": "demo-app",
+            "metadata_file": null,
+            "launch_probe_secs": 10
+          }
+          "@
+          $config | Set-Content -Path (Join-Path $package "app.json") -Encoding utf8
+          "$version" | Set-Content -Path (Join-Path $package "version.txt") -Encoding ascii
+
+          $demoBundle = "demo-app-windows-x64-demo.zip"
+          Compress-Archive -Path (Join-Path $package "*") -DestinationPath (Join-Path $dist $demoBundle) -CompressionLevel Optimal
+
+          $updatePackage = Join-Path $env:RUNNER_TEMP "demo-app-update"
+          New-Item -ItemType Directory -Force -Path $updatePackage | Out-Null
+          Copy-Item $demoApp $updatePackage
+          Copy-Item (Join-Path $package "app.json") $updatePackage
+          Copy-Item (Join-Path $package "version.txt") $updatePackage
+
+          $updateZip = "demo-app-windows-x64-online-update.zip"
+          Compress-Archive -Path (Join-Path $updatePackage "*") -DestinationPath (Join-Path $dist $updateZip) -CompressionLevel Optimal
+          Copy-Item (Join-Path $dist $updateZip) (Join-Path $metadataInput $updateZip)
+
+          foreach ($name in @("demo-app.exe", "generic-updater.exe", $demoBundle)) {
+            $path = Join-Path $dist $name
+            $hash = (Get-FileHash -Path $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $name" | Set-Content -Path "$path.sha256" -Encoding ascii
+          }
+          "metadata_input=$metadataInput" >> $env:GITHUB_OUTPUT
+
+      - name: Generate update package hash and metadata
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          METADATA_INPUT: ${{ steps.release.outputs.metadata_input }}
+        run: |
+          PRODUCT=demo-app VERSION="$VERSION" PLATFORM=windows-x64 \
+            ARTIFACT_DIR="$METADATA_INPUT" OUT_DIR=dist \
+            bash scripts/build-metadata.sh
+          cp "$METADATA_INPUT/demo-app-windows-x64-online-update.zip.sha256" \
+            dist/demo-app-windows-x64-online-update.zip.sha256
+
+      - name: Prepare bilingual release notes
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          @"
+          ## 中文
+
+          - 发布 demo-app $env:VERSION 可运行演示包及 Windows x64 更新包。
+          - 演示包包含 demo-app.exe、generic-updater.exe、app.json 和 version.txt。
+
+          ## English
+
+          - Release the runnable demo-app $env:VERSION bundle and Windows x64 update package.
+          - The demo bundle includes demo-app.exe, generic-updater.exe, app.json, and version.txt.
+          "@ | Set-Content -Path dist/release-notes.md -Encoding utf8
+
+      - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag_name || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          files: target/x86_64-pc-windows-msvc/release/generic-updater.exe
+          name: demo-app ${{ steps.release.outputs.version }}
+          body_path: dist/release-notes.md
+          files: |
+            dist/demo-app.exe
+            dist/demo-app.exe.sha256
+            dist/generic-updater.exe
+            dist/generic-updater.exe.sha256
+            dist/demo-app-windows-x64-demo.zip
+            dist/demo-app-windows-x64-demo.zip.sha256
+            dist/demo-app-windows-x64-online-update.zip
+            dist/demo-app-windows-x64-online-update.zip.sha256
+            dist/latest-version.json
           fail_on_unmatched_files: true
