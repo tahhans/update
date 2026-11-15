@@ -41,6 +41,8 @@ def classify(name: str):
     n = name.lower()
     if "portable" in n:
         return "portable", "portable"
+    if n.endswith("-demo.zip"):
+        return "portable", "portable"
     if "update" in n:
         variant = "offline" if "offline" in n else "online"
         return variant, "update"

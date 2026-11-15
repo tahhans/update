@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 //! egui 极简测试主程序（对标 Snow Shot 主程序对接层）。
 //!
 //! 架构：本程序与外置 `generic-updater` 是两个进程。主程序只负责：
@@ -16,6 +18,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::Deserialize;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 // ---------- 状态帧（updater → 主程序） ----------
 
@@ -164,6 +169,38 @@ fn load_config() -> AppConfig {
     AppConfig::default()
 }
 
+#[cfg(windows)]
+fn install_windows_cjk_font(ctx: &egui::Context) -> Result<(), String> {
+    let fonts_dir = std::env::var_os("WINDIR")
+        .map(PathBuf::from)
+        .map(|path| path.join("Fonts"))
+        .ok_or_else(|| "WINDIR is not set".to_string())?;
+    let font_path = ["simhei.ttf", "Deng.ttf", "msyh.ttf"]
+        .iter()
+        .map(|name| fonts_dir.join(name))
+        .find(|path| path.is_file())
+        .ok_or_else(|| {
+            "No supported Chinese font found (tried SimHei, DengXian, and YaHei)".to_string()
+        })?;
+    let font_bytes = std::fs::read(&font_path)
+        .map_err(|error| format!("Unable to read {}: {error}", font_path.display()))?;
+
+    let mut fonts = egui::FontDefinitions::default();
+    fonts.font_data.insert(
+        "windows_cjk".to_string(),
+        egui::FontData::from_owned(font_bytes),
+    );
+    for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+        fonts
+            .families
+            .get_mut(&family)
+            .expect("default font family exists")
+            .push("windows_cjk".to_string());
+    }
+    ctx.set_fonts(fonts);
+    Ok(())
+}
+
 /// 拉起 updater 子进程，后台线程逐行读取 stdout 状态帧。
 fn spawn_updater(shared: &Arc<Mutex<Shared>>, updater_exe: &PathBuf, config_path: &PathBuf, args: &[&str]) {
     let mut cmd = std::process::Command::new(updater_exe);
@@ -173,6 +210,12 @@ fn spawn_updater(shared: &Arc<Mutex<Shared>>, updater_exe: &PathBuf, config_path
         .arg(std::process::id().to_string())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
 
     let mut child = match cmd.spawn() {
         Ok(c) => c,
@@ -367,6 +410,19 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "demo-app",
         options,
-        Box::new(|cc| Ok(Box::new(DemoApp::new(&cc.egui_ctx)))),
+        Box::new(|cc| {
+            #[cfg(windows)]
+            let font_error = install_windows_cjk_font(&cc.egui_ctx).err();
+            #[cfg(not(windows))]
+            let font_error: Option<String> = None;
+            let app = DemoApp::new(&cc.egui_ctx);
+            if let Some(error) = font_error {
+                app.shared
+                    .lock()
+                    .unwrap()
+                    .push_log(format!("Chinese font unavailable: {error}"));
+            }
+            Ok(Box::new(app))
+        }),
     )
 }

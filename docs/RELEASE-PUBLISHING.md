@@ -81,18 +81,12 @@ latest-version.json
 本仓库的 Windows demo 工作流（`.github/workflows/build.yml`）发布：
 
 ```
-demo-app.exe
-demo-app.exe.sha256
-generic-updater.exe
-generic-updater.exe.sha256
 demo-app-windows-x64-demo.zip
 demo-app-windows-x64-demo.zip.sha256
-demo-app-windows-x64-online-update.zip
-demo-app-windows-x64-online-update.zip.sha256
 latest-version.json
 ```
 
-`demo-app-windows-x64-demo.zip` 是可直接运行的演示包，包含 GUI 主程序、外置 updater、`app.json` 和 `version.txt`。`demo-app-windows-x64-online-update.zip` 仅包含 GUI 主程序、`app.json` 和 `version.txt`；updater 不放入更新包，以免安装时替换正在运行的 updater 进程。更新 zip 使用稳定资产名，以匹配 demo 的 `asset_name` 配置；每次 Release 通过 tag 和清单中的 `version` 区分版本。所有 exe / zip 都有同名 `.sha256`。Release 正文按 `## 中文` / `## English` 分段。`latest-version.json` 由 `scripts/build-metadata.sh` 生成但不签名；因为当前 demo 配置使用 Release API 源且没有内置可信公钥，不能将它配置为强制验签的 metadata 源。此 demo 工作流不生成真实 installer、offline 包或 portable 安装包。
+`demo-app-windows-x64-demo.zip` 是可直接运行的演示包，包含 GUI 主程序、外置 updater、`app.json` 和 `version.txt`。Release 只上传此 zip、其 SHA256 文件和 `latest-version.json`；清单将 zip 标记为 portable 演示包。Release 正文按 `## 中文` / `## English` 分段。`latest-version.json` 由 `scripts/build-metadata.sh` 生成但不签名；因为当前 demo 配置使用 Release API 源且没有内置可信公钥，不能将它配置为强制验签的 metadata 源。此 demo 工作流不生成真实 installer、offline 包或独立更新包。
 
 ## 3. `.sha256` 文件格式
 

@@ -33,7 +33,9 @@ target\release\generic-updater.exe
 
 - 推一个 `v*` tag；或在 Actions 页面手动运行，并在 `tag_name` 中填写要发布的版本 tag（例如 `v0.1.0_demo-app`）。手动运行会构建当前选中的提交，并在该提交上创建这个 tag（若它尚不存在）；
 - GitHub 的 `windows-latest` 云端机器自带 VS 工具链和 Rust 环境；
-- 分别编译 `demo-app.exe`（可视化界面）和 `generic-updater.exe`（更新器），同时发布两个 exe、包含两者及 `app.json` / `version.txt` 的可运行 demo 压缩包、仅包含主程序的更新 zip、SHA256 文件、`latest-version.json` 和中英文 Release notes。
+- 分别编译 `demo-app.exe`（可视化界面）和 `generic-updater.exe`（更新器），将两者与 `app.json` / `version.txt` 打入可运行 demo 压缩包；Release 只发布该 zip、对应 `.sha256` 和 `latest-version.json`。
+
+Windows 版界面会尝试使用系统内的 SimHei、DengXian 或 YaHei 字体显示中文；点击更新操作启动 updater 时会隐藏额外的控制台窗口，输出仍会显示在界面日志中。
 
 你本地只需要写代码、push，不用装 Rust、不用装 VS。
 
@@ -226,8 +228,8 @@ cargo build --release
 
 1. 推送 `v0.1.0_demo-app` 格式的 tag，或手动运行工作流并填写 tag；
 2. CI 分别编译 GUI `demo-app.exe` 和外置更新器 `generic-updater.exe`；
-3. 生成可直接运行的 `demo-app-windows-x64-demo.zip`（包含两个 exe、`app.json` 和 `version.txt`），以及不包含 updater 的 `demo-app-windows-x64-online-update.zip`，避免更新时替换正在运行的 updater 进程；
-4. 为 exe / zip 生成同名 `.sha256`，并用 `scripts/build-metadata.sh` 为更新 zip 生成 `latest-version.json`；
-5. 上传两个 exe、可运行 demo 包、更新 zip、哈希文件与元数据到 Release，并生成中英文 Markdown 更新说明。
+3. 生成可直接运行的 `demo-app-windows-x64-demo.zip`（包含两个 exe、`app.json` 和 `version.txt`）；
+4. 为 demo zip 生成同名 `.sha256`，并用 `scripts/build-metadata.sh` 生成 `latest-version.json`；
+5. Release 只上传 demo zip、其 `.sha256` 和 `latest-version.json`，正文包含中英文说明。
 
 > 这个仓库的 demo 工作流不生成真正的安装器、离线安装包或便携安装包；Release 资产仅用于演示主程序与 updater 的协作。当前 `TRUSTED_KEYS` 为空，因此 metadata 是未签名的；demo 配置使用 Release API 源（`metadata_file: null`），不会尝试验签。
