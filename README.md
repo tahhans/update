@@ -31,7 +31,7 @@ target\release\generic-updater.exe
 
 仓库已带 `.github/workflows/build.yml`：
 
-- 推一个 `v*` tag；或在 Actions 页面手动运行，并在 `tag_name` 中填写要构建发布的 tag（例如 `v0.1.0`）；
+- 推一个 `v*` tag；或在 Actions 页面手动运行，并在 `tag_name` 中填写要发布的版本 tag（例如 `v0.1.0`）。手动运行会构建当前选中的提交，并在该提交上创建这个 tag（若它尚不存在）；
 - GitHub 的 `windows-latest` 云端机器自带 VS 工具链和 Rust 环境；
 - 自动 `cargo build --release`，把 `generic-updater.exe` 挂到对应 Release 资产。
 
